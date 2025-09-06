@@ -5,18 +5,12 @@ from rest_framework import viewsets, mixins, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import (
-    IsAuthenticated,
-    IsAdminUser,
-)
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.parsers import MultiPartParser, FormParser
 
-from drf_spectacular.utils import (
-    extend_schema,
-    OpenApiParameter,
-)
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
 from cinema.models import (
@@ -27,9 +21,7 @@ from cinema.models import (
     MovieSession,
     Order,
 )
-from cinema.permissions import (
-    IsAdminOrIfAuthenticatedReadOnly,
-)
+from cinema.permissions import IsAdminOrIfAuthenticatedReadOnly
 from cinema.serializers import (
     GenreSerializer,
     ActorSerializer,
@@ -112,7 +104,7 @@ class MovieViewSet(
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # Не задаємо class-level parser_classes — JSON за замовчуванням.
+    # ⛔️ НЕ задаємо class-level parser_classes — JSON за замовчуванням.
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
@@ -147,28 +139,40 @@ class MovieViewSet(
             return MovieCreateSerializer
         return MovieSerializer
 
-    # ✅ Гарантуємо 201 і реальний NULL у image
+    # ✅ Створення фільму без зображення: гарантуємо реальний NULL у image
     def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        # повністю ігноруємо будь-яке поле image при створенні
-        data.pop("image", None)
-
-        # partial=True — щоб не вимагати необов'язкові поля
-        serializer = self.get_serializer(data=data, partial=True)
+        # Валідовуємо, але не викликаємо serializer.save()
+        serializer = self.get_serializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        vdata = dict(serializer.validated_data)
 
-        # критично: зберігаємо з image=None
-        movie = serializer.save(image=None)
+        # Ігноруємо image повністю
+        vdata.pop("image", None)
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        # Витягуємо M2M, щоб проставити їх після створення
+        genres = vdata.pop("genres", [])
+        actors = vdata.pop("actors", [])
+
+        # Створюємо інстанс вручну з image=None
+        movie = Movie.objects.create(image=None, **vdata)
+
+        # Проставляємо M2M (якщо передані)
+        if genres:
+            movie.genres.set(genres)
+        if actors:
+            movie.actors.set(actors)
+
+        # Формуємо відповідь (201)
+        out = self.get_serializer(movie)
+        headers = self.get_success_headers(out.data)
+        return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(
         methods=["POST"],
         detail=True,
         url_path="upload-image",
         permission_classes=[IsAdminUser],
-        parser_classes=[MultiPartParser, FormParser],  # лише тут multipart
+        parser_classes=[MultiPartParser, FormParser],  # ✅ лише тут multipart
     )
     def upload_image(self, request, pk=None):
         """Upload image to specific movie."""
