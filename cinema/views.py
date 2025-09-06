@@ -6,23 +6,26 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
-    IsAuthenticated, IsAdminUser,
+    IsAuthenticated,
+    IsAdminUser,
 )
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
-
-from rest_framework.parsers import (
-    MultiPartParser, FormParser,
-)
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from drf_spectacular.utils import (
-    extend_schema, OpenApiParameter,
+    extend_schema,
+    OpenApiParameter,
 )
 from drf_spectacular.types import OpenApiTypes
 
 from cinema.models import (
-    Genre, Actor, CinemaHall, Movie,
-    MovieSession, Order,
+    Genre,
+    Actor,
+    CinemaHall,
+    Movie,
+    MovieSession,
+    Order,
 )
 from cinema.permissions import (
     IsAdminOrIfAuthenticatedReadOnly,
@@ -32,14 +35,15 @@ from cinema.serializers import (
     ActorSerializer,
     CinemaHallSerializer,
     MovieSerializer,
+    MovieCreateSerializer,
+    MovieListSerializer,
+    MovieDetailSerializer,
+    MovieImageSerializer,
     MovieSessionSerializer,
     MovieSessionListSerializer,
-    MovieDetailSerializer,
     MovieSessionDetailSerializer,
-    MovieListSerializer,
     OrderSerializer,
     OrderListSerializer,
-    MovieImageSerializer,
 )
 
 
@@ -82,26 +86,19 @@ class CinemaHallViewSet(
             name="title",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            description=(
-                "Substring match (case-insensitive) for "
-                "movie title."
-            ),
+            description="Case-insensitive substring for title.",
         ),
         OpenApiParameter(
             name="genres",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            description=(
-                "Comma-separated genre IDs, e.g. `1,2,5`."
-            ),
+            description="Genre IDs comma-separated, e.g. '1,2,5'.",
         ),
         OpenApiParameter(
             name="actors",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            description=(
-                "Comma-separated actor IDs, e.g. `3,4`."
-            ),
+            description="Actor IDs comma-separated, e.g. '3,4'.",
         ),
     ]
 )
@@ -111,9 +108,7 @@ class MovieViewSet(
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Movie.objects.prefetch_related(
-        "genres", "actors"
-    )
+    queryset = Movie.objects.prefetch_related("genres", "actors")
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
@@ -121,12 +116,10 @@ class MovieViewSet(
     parser_classes = (MultiPartParser, FormParser)
 
     @staticmethod
-    def _params_to_ints(qs):
-        """Convert comma-separated IDs -> list[int]."""
-        return [int(str_id) for str_id in qs.split(",")]
+    def _params_to_ints(qs: str) -> list[int]:
+        return [int(item) for item in qs.split(",") if item.strip()]
 
     def get_queryset(self):
-        """Retrieve movies with filters."""
         title = self.request.query_params.get("title")
         genres = self.request.query_params.get("genres")
         actors = self.request.query_params.get("actors")
@@ -151,6 +144,8 @@ class MovieViewSet(
             return MovieDetailSerializer
         if self.action == "upload_image":
             return MovieImageSerializer
+        if self.action == "create":
+            return MovieCreateSerializer
         return MovieSerializer
 
     @action(
@@ -162,6 +157,12 @@ class MovieViewSet(
     )
     def upload_image(self, request, pk=None):
         """Upload image to specific movie."""
+        if "image" not in request.FILES:
+            return Response(
+                {"image": ["This field is required."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         movie = self.get_object()
         serializer = self.get_serializer(movie, data=request.data)
 
@@ -181,10 +182,7 @@ class MovieViewSet(
             name="date",
             type=OpenApiTypes.DATE,
             location=OpenApiParameter.QUERY,
-            description=(
-                "Filter by show_time date in format "
-                "`YYYY-MM-DD`."
-            ),
+            description="Filter by show_time date (YYYY-MM-DD).",
         ),
         OpenApiParameter(
             name="movie",
