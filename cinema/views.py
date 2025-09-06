@@ -98,6 +98,8 @@ class MovieViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,      # ✅ додаємо оновлення
+    mixins.DestroyModelMixin,     # ✅ додаємо видалення
     viewsets.GenericViewSet,
 ):
     queryset = Movie.objects.prefetch_related("genres", "actors")
@@ -135,37 +137,48 @@ class MovieViewSet(
             return MovieDetailSerializer
         if self.action == "upload_image":
             return MovieImageSerializer
-        if self.action == "create":
+        if self.action in ("create", "update", "partial_update"):
             return MovieCreateSerializer
         return MovieSerializer
 
     # ✅ Створення фільму без зображення: гарантуємо реальний NULL у image
     def create(self, request, *args, **kwargs):
-        # Валідовуємо, але не викликаємо serializer.save()
         serializer = self.get_serializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         vdata = dict(serializer.validated_data)
 
-        # Ігноруємо image повністю
+        # Ігноруємо image повністю під час створення
         vdata.pop("image", None)
 
-        # Витягуємо M2M, щоб проставити їх після створення
+        # Витягуємо M2M
         genres = vdata.pop("genres", [])
         actors = vdata.pop("actors", [])
 
-        # Створюємо інстанс вручну з image=None
+        # Створюємо об'єкт з image=None
         movie = Movie.objects.create(image=None, **vdata)
 
-        # Проставляємо M2M (якщо передані)
         if genres:
             movie.genres.set(genres)
         if actors:
             movie.actors.set(actors)
 
-        # Формуємо відповідь (201)
         out = self.get_serializer(movie)
         headers = self.get_success_headers(out.data)
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    # ✅ Оновлення без зміни image через цей ендпоінт (image — окремий action)
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.get("partial", False)
+        instance = self.get_object()
+
+        data = request.data.copy()
+        # ігноруємо image у PATCH/PUT, щоб картинка змінювалась тільки через upload-image
+        data.pop("image", None)
+
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
     @action(
         methods=["POST"],
