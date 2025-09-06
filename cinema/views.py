@@ -112,8 +112,7 @@ class MovieViewSet(
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # ⛔️ ВАЖЛИВО: НЕ задаємо class-level parser_classes,
-    # щоб лишився JSONParser за замовчуванням!
+    # ⛔️ НЕ задаємо class-level parser_classes — JSON за замовчуванням.
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
@@ -148,12 +147,27 @@ class MovieViewSet(
             return MovieCreateSerializer
         return MovieSerializer
 
+    # ✅ Явно дозволяємо створення без image
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+
+        # якщо image порожній або відсутній — прибираємо його
+        image_val = data.get("image", None)
+        if image_val in ("", None):
+            data.pop("image", None)
+
+        serializer = self.get_serializer(data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     @action(
         methods=["POST"],
         detail=True,
         url_path="upload-image",
         permission_classes=[IsAdminUser],
-        parser_classes=[MultiPartParser, FormParser],  # ✅ тільки тут
+        parser_classes=[MultiPartParser, FormParser],  # ✅ лише тут multipart
     )
     def upload_image(self, request, pk=None):
         """Upload image to specific movie."""
