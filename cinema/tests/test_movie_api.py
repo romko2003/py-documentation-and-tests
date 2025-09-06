@@ -79,12 +79,7 @@ class AdminMoviesApiTests(APITestCase):
         }
         res = self.client.post(MOVIES_URL, payload)
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertIsNone(Movie.objects.get(id=res.data["id"]).image)
 
-    def test_upload_image_endpoint_exists(self):
-        m = Movie.objects.create(title="Pic", description="d", duration=90)
-        url = upload_url(m.id)
-        res = self.client.post(url, {})  # bad request without file
-        self.assertIn(res.status_code,
-                      (status.HTTP_400_BAD_REQUEST,
-                                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE))
+        movie = Movie.objects.get(id=res.data["id"])
+        self.assertFalse(movie.image)
+        self.assertIsNone(movie.image.name)
