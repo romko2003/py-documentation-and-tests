@@ -112,7 +112,7 @@ class MovieViewSet(
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # Не задаємо class-level parser_classes → JSON за замовчуванням.
+    # Не задаємо class-level parser_classes — JSON за замовчуванням.
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
@@ -147,33 +147,21 @@ class MovieViewSet(
             return MovieCreateSerializer
         return MovieSerializer
 
-    # ✅ Створення фільму без зображення: гарантуємо image is NULL
+    # ✅ Гарантуємо 201 і реальний NULL у image
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
+        # повністю ігноруємо будь-яке поле image при створенні
+        data.pop("image", None)
 
-        # повністю прибираємо "порожні" варіанти image, щоб серіалізатор не спіткнувся
-        if "image" in data:
-            val = data.get("image")
-            if val in ("", None, "null", "None"):
-                data.pop("image", None)
-
+        # partial=True — щоб не вимагати необов'язкові поля
         serializer = self.get_serializer(data=data, partial=True)
         serializer.is_valid(raise_exception=True)
 
-        movie = serializer.save()
-
-        if "image" not in request.data and "image" not in data:
-            # приберемо можливий placeholder/порожній файл
-            if getattr(movie, "image", None):
-                try:
-                    movie.image.delete(save=False)
-                except Exception:
-                    pass
-            type(movie).objects.filter(pk=movie.pk).update(image=None)
+        # критично: зберігаємо з image=None
+        movie = serializer.save(image=None)
 
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.to_representation(movie),
-                        status=status.HTTP_201_CREATED, headers=headers)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(
         methods=["POST"],
