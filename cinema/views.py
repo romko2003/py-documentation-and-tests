@@ -112,8 +112,8 @@ class MovieViewSet(
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # для /upload-image/
-    parser_classes = (MultiPartParser, FormParser)
+    # ⛔️ ВАЖЛИВО: НЕ задаємо class-level parser_classes,
+    # щоб лишився JSONParser за замовчуванням!
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
@@ -153,7 +153,7 @@ class MovieViewSet(
         detail=True,
         url_path="upload-image",
         permission_classes=[IsAdminUser],
-        parser_classes=[MultiPartParser, FormParser],
+        parser_classes=[MultiPartParser, FormParser],  # ✅ тільки тут
     )
     def upload_image(self, request, pk=None):
         """Upload image to specific movie."""
@@ -168,12 +168,9 @@ class MovieViewSet(
 
         if serializer.is_valid():
             serializer.save()
-            return Response(
-                serializer.data, status=status.HTTP_200_OK
-            )
-        return Response(
-            serializer.errors, status=status.HTTP_400_BAD_REQUEST
-        )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(
