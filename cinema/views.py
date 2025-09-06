@@ -151,21 +151,29 @@ class MovieViewSet(
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
 
-        # повністю прибираємо "порожні" варіанти image
+        # повністю прибираємо "порожні" варіанти image, щоб серіалізатор не спіткнувся
         if "image" in data:
             val = data.get("image")
             if val in ("", None, "null", "None"):
                 data.pop("image", None)
 
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=data, partial=True)
         serializer.is_valid(raise_exception=True)
 
-        # ключовий момент: примусово зберегти з image=None
-        movie = serializer.save(image=None)
+        movie = serializer.save()
+
+        if "image" not in request.data and "image" not in data:
+            # приберемо можливий placeholder/порожній файл
+            if getattr(movie, "image", None):
+                try:
+                    movie.image.delete(save=False)
+                except Exception:
+                    pass
+            type(movie).objects.filter(pk=movie.pk).update(image=None)
 
         headers = self.get_success_headers(serializer.data)
-        # повертаємо дані з серіалізатора створення (містить id)
-        return Response(serializer.to_representation(movie), status=status.HTTP_201_CREATED, headers=headers)
+        return Response(serializer.to_representation(movie),
+                        status=status.HTTP_201_CREATED, headers=headers)
 
     @action(
         methods=["POST"],
