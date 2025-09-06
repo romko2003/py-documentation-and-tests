@@ -112,7 +112,7 @@ class MovieViewSet(
     serializer_class = MovieSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # ⛔️ НЕ задаємо class-level parser_classes — JSON за замовчуванням.
+    # Не задаємо class-level parser_classes → JSON за замовчуванням.
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
@@ -147,27 +147,32 @@ class MovieViewSet(
             return MovieCreateSerializer
         return MovieSerializer
 
-    # ✅ Явно дозволяємо створення без image
+    # ✅ Створення фільму без зображення: гарантуємо image is NULL
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
 
-        # якщо image порожній або відсутній — прибираємо його
-        image_val = data.get("image", None)
-        if image_val in ("", None):
-            data.pop("image", None)
+        # повністю прибираємо "порожні" варіанти image
+        if "image" in data:
+            val = data.get("image")
+            if val in ("", None, "null", "None"):
+                data.pop("image", None)
 
-        serializer = self.get_serializer(data=data, partial=True)
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+
+        # ключовий момент: примусово зберегти з image=None
+        movie = serializer.save(image=None)
+
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        # повертаємо дані з серіалізатора створення (містить id)
+        return Response(serializer.to_representation(movie), status=status.HTTP_201_CREATED, headers=headers)
 
     @action(
         methods=["POST"],
         detail=True,
         url_path="upload-image",
         permission_classes=[IsAdminUser],
-        parser_classes=[MultiPartParser, FormParser],  # ✅ лише тут multipart
+        parser_classes=[MultiPartParser, FormParser],  # лише тут multipart
     )
     def upload_image(self, request, pk=None):
         """Upload image to specific movie."""
