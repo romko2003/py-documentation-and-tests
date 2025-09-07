@@ -2,15 +2,19 @@ from datetime import datetime
 
 from django.db.models import F, Count
 from rest_framework import viewsets, mixins, status
-from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.pagination import (PageNumberPagination)
+from rest_framework.permissions import (IsAuthenticated,
+                                        IsAdminUser)
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import (MultiPartParser,
+                                    FormParser)
+from rest_framework_simplejwt.authentication import (
+    JWTAuthentication)
 
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import (extend_schema,
+                                   OpenApiParameter)
 from drf_spectacular.types import OpenApiTypes
 
 from cinema.models import (
@@ -46,7 +50,7 @@ class GenreViewSet(
 ):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
@@ -57,7 +61,7 @@ class ActorViewSet(
 ):
     queryset = Actor.objects.all()
     serializer_class = ActorSerializer
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
@@ -68,7 +72,7 @@ class CinemaHallViewSet(
 ):
     queryset = CinemaHall.objects.all()
     serializer_class = CinemaHallSerializer
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
 
@@ -98,19 +102,19 @@ class MovieViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,      # ✅ додаємо оновлення
-    mixins.DestroyModelMixin,     # ✅ додаємо видалення
+    mixins.UpdateModelMixin,      # оновлення
+    mixins.DestroyModelMixin,     # видалення
     viewsets.GenericViewSet,
 ):
     queryset = Movie.objects.prefetch_related("genres", "actors")
     serializer_class = MovieSerializer
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
-    # ⛔️ НЕ задаємо class-level parser_classes — JSON за замовчуванням.
 
     @staticmethod
     def _params_to_ints(qs: str) -> list[int]:
-        return [int(item) for item in qs.split(",") if item.strip()]
+        return [int(item) for item in qs.split(",")
+                if item.strip()]
 
     def get_queryset(self):
         title = self.request.query_params.get("title")
@@ -141,9 +145,9 @@ class MovieViewSet(
             return MovieCreateSerializer
         return MovieSerializer
 
-    # ✅ Створення фільму без зображення: гарантуємо реальний NULL у image
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data, partial=True)
+        serializer = self.get_serializer(data=request.data,
+                                         partial=True)
         serializer.is_valid(raise_exception=True)
         vdata = dict(serializer.validated_data)
 
@@ -164,9 +168,9 @@ class MovieViewSet(
 
         out = self.get_serializer(movie)
         headers = self.get_success_headers(out.data)
-        return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(out.data, status=status.HTTP_201_CREATED,
+                        headers=headers)
 
-    # ✅ Оновлення без зміни image через цей ендпоінт (image — окремий action)
     def update(self, request, *args, **kwargs):
         partial = kwargs.get("partial", False)
         instance = self.get_object()
@@ -234,7 +238,7 @@ class MovieSessionViewSet(viewsets.ModelViewSet):
         )
     )
     serializer_class = MovieSessionSerializer
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
 
     def get_queryset(self):
@@ -275,7 +279,7 @@ class OrderViewSet(
     )
     serializer_class = OrderSerializer
     pagination_class = OrderPagination
-    authentication_classes = (TokenAuthentication,)
+    authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
